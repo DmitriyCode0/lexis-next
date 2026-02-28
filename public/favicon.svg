@@ -1,0 +1,21 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="32" height="32" rx="7" fill="#1a1a2e"/>
+  
+  <!-- Morpheme structure: three connected blocks representing prefix-root-suffix -->
+  <!-- Prefix block -->
+  <rect x="3" y="10" width="7" height="12" rx="1.5" fill="#00d4ff" opacity="0.9"/>
+  <text x="6.5" y="18" font-family="monospace" font-size="7" font-weight="bold" text-anchor="middle" fill="#1a1a2e">re</text>
+  
+  <!-- Root block (center, highlighted) -->
+  <rect x="12.5" y="8" width="7" height="16" rx="1.5" fill="#00ff88" opacity="0.95"/>
+  <text x="16" y="17" font-family="monospace" font-size="7" font-weight="bold" text-anchor="middle" fill="#1a1a2e">form</text>
+  
+  <!-- Suffix block -->
+  <rect x="21.5" y="10" width="7.5" height="12" rx="1.5" fill="#ff6b9d" opacity="0.9"/>
+  <text x="25.25" y="18" font-family="monospace" font-size="7" font-weight="bold" text-anchor="middle" fill="#1a1a2e">ed</text>
+  
+  <!-- Connection lines -->
+  <line x1="10" y1="16" x2="12.5" y2="16" stroke="#4a90e2" stroke-width="0.75" opacity="0.6"/>
+  <line x1="19.5" y1="16" x2="21.5" y2="16" stroke="#4a90e2" stroke-width="0.75" opacity="0.6"/>
+</svg>

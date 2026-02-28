@@ -25,6 +25,9 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Lexis — Morpheme & Grammar Analyzer',
   description: 'See language, structurally. Break down sentences into parts of speech and morphological components.',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({
