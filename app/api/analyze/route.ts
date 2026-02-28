@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SchemaType, type ResponseSchema } from "@google/generative-ai";
-import { getGeminiModel } from "@/lib/gemini";
+import {
+  FALLBACK_GEMINI_MODEL,
+  DEFAULT_GEMINI_MODEL,
+  getGeminiModel,
+} from "@/lib/gemini";
 import type {
   AnalysisResult,
   AnalyzedWord,
@@ -37,7 +41,11 @@ const VALID_MORPHEME_TYPES: MorphemeType[] = [
   "infix",
 ];
 
-const GEMINI_TIMEOUT_MS = 50000;
+const GEMINI_PRIMARY_TIMEOUT_MS = 25000;
+const GEMINI_FALLBACK_TIMEOUT_MS = 22000;
+const GEMINI_PRIMARY_MAX_OUTPUT_TOKENS = 4096;
+const GEMINI_RETRY_MAX_OUTPUT_TOKENS = 8192;
+const GEMINI_FALLBACK_MAX_OUTPUT_TOKENS = 6144;
 
 const SYSTEM_PROMPT = `You are a precise computational linguist. Output strict RFC 8259 JSON only — all keys and string values must use double quotes, no trailing commas, no comments, no markdown.
 
@@ -130,6 +138,25 @@ function normalizeResponse(data: unknown): unknown {
 
         // morphemes: missing → empty array
         if (!Array.isArray(w.morphemes)) w.morphemes = [];
+
+        // Ensure every non-punctuation token has at least one root morpheme.
+        // This avoids hard-failing on partially valid model output.
+        const hasRoot = (w.morphemes as Array<Record<string, unknown>>).some(
+          (m) => m?.type === "root",
+        );
+        if (!w.isPunctuation && !hasRoot) {
+          const rootText =
+            typeof w.lemma === "string" && w.lemma.trim().length > 0
+              ? w.lemma
+              : typeof w.original === "string"
+                ? w.original
+                : "";
+          (w.morphemes as Array<Record<string, unknown>>).push({
+            text: rootText,
+            type: "root",
+            meaning: "core lexical meaning",
+          });
+        }
 
         // Strip empty group fields
         if (w.groupId === "") delete w.groupId;
@@ -277,69 +304,134 @@ async function callGemini(
   sentenceTranslation?: string;
   words: AnalyzedWord[];
 }> {
-  const model = getGeminiModel();
+  const callGeminiWithModel = async (
+    modelName: string,
+    timeoutMs: number,
+    maxOutputTokens: number,
+  ): Promise<{
+    sentence: string;
+    sentenceTranslation?: string;
+    words: AnalyzedWord[];
+  }> => {
+    const model = getGeminiModel(modelName);
 
-  const generatePromise = model.generateContent({
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: `Analyze this sentence: "${sentence}"` }],
+    const generatePromise = model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `Analyze this sentence: "${sentence}"` }],
+        },
+      ],
+      systemInstruction: { role: "model", parts: [{ text: SYSTEM_PROMPT }] },
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: RESPONSE_SCHEMA,
+        maxOutputTokens,
       },
-    ],
-    systemInstruction: { role: "model", parts: [{ text: SYSTEM_PROMPT }] },
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
-      maxOutputTokens: 20000,
-    },
-  });
+    });
 
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(
-      () => reject(new Error("Gemini request timed out")),
-      GEMINI_TIMEOUT_MS,
-    ),
-  );
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Gemini request timed out (${modelName})`)),
+        timeoutMs,
+      ),
+    );
 
-  const result = await Promise.race([generatePromise, timeoutPromise]);
+    const result = await Promise.race([generatePromise, timeoutPromise]);
 
-  // Check if the response was truncated
-  const finishReason = result.response.candidates?.[0]?.finishReason;
-  if (finishReason && finishReason !== "STOP") {
-    console.warn(`[analyze] Gemini finishReason: ${finishReason}`);
-  }
-
-  let text = result.response.text();
-
-  // Strip markdown code fences if the model wraps output despite being told not to
-  text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    // If JSON parse fails, try to repair truncated output
-    const repaired = repairTruncatedJson(text);
-    if (repaired) {
-      console.warn(
-        "[analyze] Repaired truncated JSON response (some words may be missing)",
-      );
-      parsed = repaired;
-    } else {
-      console.error("[analyze] JSON parse failed and repair unsuccessful");
-      console.error("[analyze] Full raw response:", text.slice(0, 500));
-      throw new Error("Incomplete response from Gemini — please try again");
+    const finishReason = result.response.candidates?.[0]?.finishReason;
+    if (finishReason && finishReason !== "STOP") {
+      console.warn(`[analyze] Gemini finishReason (${modelName}): ${finishReason}`);
+      if (finishReason === "MAX_TOKENS") {
+        throw new Error(`Gemini response hit MAX_TOKENS (${modelName})`);
+      }
     }
+
+    let text = result.response.text();
+
+    text = text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      const repaired = repairTruncatedJson(text);
+      if (repaired) {
+        console.warn(
+          "[analyze] Repaired truncated JSON response (some words may be missing)",
+        );
+        parsed = repaired;
+      } else {
+        console.error("[analyze] JSON parse failed and repair unsuccessful");
+        console.error("[analyze] Full raw response:", text.slice(0, 500));
+        throw new Error("Incomplete response from Gemini — please try again");
+      }
+    }
+
+    parsed = normalizeResponse(parsed);
+
+    if (!validateResult(parsed)) {
+      throw new Error("Invalid response shape from Gemini");
+    }
+
+    return parsed;
+  };
+
+  try {
+    return await callGeminiWithModel(
+      DEFAULT_GEMINI_MODEL,
+      GEMINI_PRIMARY_TIMEOUT_MS,
+      GEMINI_PRIMARY_MAX_OUTPUT_TOKENS,
+    );
+  } catch (error) {
+    let lastError = error;
+    let message =
+      lastError instanceof Error ? lastError.message : "Unknown Gemini error";
+
+    const hitMaxTokens = message.includes("MAX_TOKENS");
+    if (hitMaxTokens) {
+      console.warn(
+        `[analyze] Primary model hit MAX_TOKENS, retrying with larger output budget (${GEMINI_RETRY_MAX_OUTPUT_TOKENS})`,
+      );
+      try {
+        return await callGeminiWithModel(
+          DEFAULT_GEMINI_MODEL,
+          GEMINI_PRIMARY_TIMEOUT_MS,
+          GEMINI_RETRY_MAX_OUTPUT_TOKENS,
+        );
+      } catch (retryError) {
+        lastError = retryError;
+        message =
+          retryError instanceof Error
+            ? retryError.message
+            : "Unknown Gemini error";
+      }
+    }
+
+    const isTimeout = message.includes("timed out");
+    const isMaxTokens = message.includes("MAX_TOKENS");
+    if (
+      (!isTimeout && !isMaxTokens) ||
+      FALLBACK_GEMINI_MODEL === DEFAULT_GEMINI_MODEL
+    ) {
+      throw lastError;
+    }
+
+    console.warn(
+      `[analyze] Retrying with fallback model ${FALLBACK_GEMINI_MODEL}`,
+    );
+    return callGeminiWithModel(
+      FALLBACK_GEMINI_MODEL,
+      GEMINI_FALLBACK_TIMEOUT_MS,
+      isMaxTokens
+        ? GEMINI_RETRY_MAX_OUTPUT_TOKENS
+        : GEMINI_FALLBACK_MAX_OUTPUT_TOKENS,
+    );
   }
-
-  parsed = normalizeResponse(parsed);
-
-  if (!validateResult(parsed)) {
-    throw new Error("Invalid response shape from Gemini");
-  }
-
-  return parsed;
 }
 
 export async function POST(request: NextRequest) {

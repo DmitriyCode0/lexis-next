@@ -134,9 +134,7 @@ export const EXAMPLE_RESULTS: { label: string; result: AnalysisResult }[] = [
           original: "piece",
           lemma: "piece",
           partOfSpeech: "idiom",
-          morphemes: [
-            { text: "piece", type: "root", meaning: "portion/part" },
-          ],
+          morphemes: [{ text: "piece", type: "root", meaning: "portion/part" }],
           isPunctuation: false,
           groupId: "group-0",
           groupMeaning: "something very easy",
@@ -147,9 +145,7 @@ export const EXAMPLE_RESULTS: { label: string; result: AnalysisResult }[] = [
           original: "of",
           lemma: "of",
           partOfSpeech: "idiom",
-          morphemes: [
-            { text: "of", type: "root", meaning: "belonging to" },
-          ],
+          morphemes: [{ text: "of", type: "root", meaning: "belonging to" }],
           isPunctuation: false,
           groupId: "group-0",
           groupMeaning: "something very easy",
@@ -160,9 +156,7 @@ export const EXAMPLE_RESULTS: { label: string; result: AnalysisResult }[] = [
           original: "cake",
           lemma: "cake",
           partOfSpeech: "idiom",
-          morphemes: [
-            { text: "cake", type: "root", meaning: "baked dessert" },
-          ],
+          morphemes: [{ text: "cake", type: "root", meaning: "baked dessert" }],
           isPunctuation: false,
           groupId: "group-0",
           groupMeaning: "something very easy",
@@ -182,9 +176,7 @@ export const EXAMPLE_RESULTS: { label: string; result: AnalysisResult }[] = [
           original: "her",
           lemma: "she",
           partOfSpeech: "pronoun",
-          morphemes: [
-            { text: "her", type: "root", meaning: "female object" },
-          ],
+          morphemes: [{ text: "her", type: "root", meaning: "female object" }],
           isPunctuation: false,
           translation: "неї",
         },
@@ -203,10 +195,8 @@ export const EXAMPLE_RESULTS: { label: string; result: AnalysisResult }[] = [
     label: "The uncomfortable realization transformed her understanding.",
     result: {
       id: "example-morphemes",
-      sentence:
-        "The uncomfortable realization transformed her understanding.",
-      sentenceTranslation:
-        "Некомфортне усвідомлення змінило її розуміння.",
+      sentence: "The uncomfortable realization transformed her understanding.",
+      sentenceTranslation: "Некомфортне усвідомлення змінило її розуміння.",
       analyzedAt: new Date().toISOString(),
       words: [
         {
