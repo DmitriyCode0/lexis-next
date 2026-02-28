@@ -8,7 +8,9 @@ export const DEFAULT_GEMINI_MODEL =
 export const FALLBACK_GEMINI_MODEL =
   process.env.GEMINI_FALLBACK_MODEL || "gemini-2.0-flash";
 
-export function getGeminiModel(modelName = DEFAULT_GEMINI_MODEL): GenerativeModel {
+export function getGeminiModel(
+  modelName = DEFAULT_GEMINI_MODEL,
+): GenerativeModel {
   const cached = _models.get(modelName);
   if (cached) return cached;
 

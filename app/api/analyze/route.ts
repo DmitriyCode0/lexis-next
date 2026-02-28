@@ -124,56 +124,52 @@ function normalizeResponse(data: unknown): unknown {
   const obj = data as Record<string, unknown>;
 
   if (Array.isArray(obj.words)) {
-    obj.words = (obj.words as Array<Record<string, unknown>>).map(
-      (w, idx) => {
-        // id: number → string
-        if (typeof w.id === "number") w.id = String(w.id);
-        if (w.id === undefined) w.id = String(idx);
+    obj.words = (obj.words as Array<Record<string, unknown>>).map((w, idx) => {
+      // id: number → string
+      if (typeof w.id === "number") w.id = String(w.id);
+      if (w.id === undefined) w.id = String(idx);
 
-        // isPunctuation: missing → false
-        if (w.isPunctuation === undefined) w.isPunctuation = false;
+      // isPunctuation: missing → false
+      if (w.isPunctuation === undefined) w.isPunctuation = false;
 
-        // lemma: missing → copy from original
-        if (!w.lemma && typeof w.original === "string") w.lemma = w.original;
+      // lemma: missing → copy from original
+      if (!w.lemma && typeof w.original === "string") w.lemma = w.original;
 
-        // morphemes: missing → empty array
-        if (!Array.isArray(w.morphemes)) w.morphemes = [];
+      // morphemes: missing → empty array
+      if (!Array.isArray(w.morphemes)) w.morphemes = [];
 
-        // Ensure every non-punctuation token has at least one root morpheme.
-        // This avoids hard-failing on partially valid model output.
-        const hasRoot = (w.morphemes as Array<Record<string, unknown>>).some(
-          (m) => m?.type === "root",
-        );
-        if (!w.isPunctuation && !hasRoot) {
-          const rootText =
-            typeof w.lemma === "string" && w.lemma.trim().length > 0
-              ? w.lemma
-              : typeof w.original === "string"
-                ? w.original
-                : "";
-          (w.morphemes as Array<Record<string, unknown>>).push({
-            text: rootText,
-            type: "root",
-            meaning: "core lexical meaning",
-          });
-        }
+      // Ensure every non-punctuation token has at least one root morpheme.
+      // This avoids hard-failing on partially valid model output.
+      const hasRoot = (w.morphemes as Array<Record<string, unknown>>).some(
+        (m) => m?.type === "root",
+      );
+      if (!w.isPunctuation && !hasRoot) {
+        const rootText =
+          typeof w.lemma === "string" && w.lemma.trim().length > 0
+            ? w.lemma
+            : typeof w.original === "string"
+              ? w.original
+              : "";
+        (w.morphemes as Array<Record<string, unknown>>).push({
+          text: rootText,
+          type: "root",
+          meaning: "core lexical meaning",
+        });
+      }
 
-        // Strip empty group fields
-        if (w.groupId === "") delete w.groupId;
-        if (w.groupMeaning === "") delete w.groupMeaning;
-        if (w.groupTranslation === "") delete w.groupTranslation;
+      // Strip empty group fields
+      if (w.groupId === "") delete w.groupId;
+      if (w.groupMeaning === "") delete w.groupMeaning;
+      if (w.groupTranslation === "") delete w.groupTranslation;
 
-        return w;
-      },
-    );
+      return w;
+    });
   }
 
   return obj;
 }
 
-function validateResult(
-  data: unknown,
-): data is {
+function validateResult(data: unknown): data is {
   sentence: string;
   sentenceTranslation?: string;
   words: AnalyzedWord[];
@@ -219,7 +215,10 @@ function validateResult(
       return false;
     }
     if (typeof w.isPunctuation !== "boolean") {
-      console.error(`[validate] word[${i}].isPunctuation is not a boolean:`, w.isPunctuation);
+      console.error(
+        `[validate] word[${i}].isPunctuation is not a boolean:`,
+        w.isPunctuation,
+      );
       return false;
     }
     if (w.translation !== undefined && typeof w.translation !== "string") {
@@ -227,7 +226,10 @@ function validateResult(
       return false;
     }
     if (!VALID_POS.includes(w.partOfSpeech as PartOfSpeech)) {
-      console.error(`[validate] word[${i}].partOfSpeech invalid:`, w.partOfSpeech);
+      console.error(
+        `[validate] word[${i}].partOfSpeech invalid:`,
+        w.partOfSpeech,
+      );
       return false;
     }
     if (!Array.isArray(w.morphemes)) {
@@ -250,7 +252,9 @@ function validateResult(
         (m) => m.type === "root",
       );
       if (!hasRoot) {
-        console.error(`[validate] word[${i}] "${w.original}" has no root morpheme`);
+        console.error(
+          `[validate] word[${i}] "${w.original}" has no root morpheme`,
+        );
         return false;
       }
     }
@@ -261,7 +265,10 @@ function validateResult(
         return false;
       }
       if (!VALID_MORPHEME_TYPES.includes(morpheme.type as MorphemeType)) {
-        console.error(`[validate] word[${i}] morpheme.type invalid:`, morpheme.type);
+        console.error(
+          `[validate] word[${i}] morpheme.type invalid:`,
+          morpheme.type,
+        );
         return false;
       }
       if (typeof morpheme.meaning !== "string") {
@@ -297,9 +304,7 @@ function repairTruncatedJson(text: string): unknown | null {
   }
 }
 
-async function callGemini(
-  sentence: string,
-): Promise<{
+async function callGemini(sentence: string): Promise<{
   sentence: string;
   sentenceTranslation?: string;
   words: AnalyzedWord[];
@@ -342,7 +347,9 @@ async function callGemini(
 
     const finishReason = result.response.candidates?.[0]?.finishReason;
     if (finishReason && finishReason !== "STOP") {
-      console.warn(`[analyze] Gemini finishReason (${modelName}): ${finishReason}`);
+      console.warn(
+        `[analyze] Gemini finishReason (${modelName}): ${finishReason}`,
+      );
       if (finishReason === "MAX_TOKENS") {
         throw new Error(`Gemini response hit MAX_TOKENS (${modelName})`);
       }
